@@ -20,11 +20,11 @@ class Settings(BaseSettings):
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "chatbot_research"
 
-    # ── Gemini LLM ───────────────────────────────────────────────────────────
-    gemini_api_key: str  # Required — set GEMINI_API_KEY in .env or Railway Variables
-    gemini_model: str = "gemini-2.0-flash"
-    gemini_temperature: float = 0.3
-    gemini_max_tokens: int = 512
+    # ── OpenAI LLM ───────────────────────────────────────────────────────────
+    openai_api_key: str  # Required — set OPENAI_API_KEY in .env or Railway Variables
+    openai_model: str = "gpt-4o-mini"
+    openai_temperature: float = 0.3
+    openai_max_tokens: int = 512
 
     # ── Experiments ──────────────────────────────────────────────────────────
     default_experiment_id: Optional[str] = None
