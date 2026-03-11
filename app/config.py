@@ -1,44 +1,42 @@
 from functools import lru_cache
+from typing import List, Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import AnyHttpUrl
-from typing import List, Optional, Union
 
 
 class Settings(BaseSettings):
-    # Tell pydantic-settings to load from .env in this directory
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="allow"  # Allow extra fields like cors_origins
+        extra="allow",
     )
 
     # Core app
     app_name: str = "Research GenAI Chatbot Backend"
     app_env: str = "development"
 
-    # Database
-    database_url: str = "sqlite:///./dev.db"
+    # ── MongoDB ──────────────────────────────────────────────────────────────
+    mongodb_uri: str = "mongodb://localhost:27017"
+    mongodb_db_name: str = "chatbot_research"
 
-    # LLM / OpenAI / LLAMA
-    openai_api_key: str = "sk-dummy-key-for-local-dev"
-    openai_model: str = "gpt-4o-mini"
-    openai_temperature: float = 0.3
-    openai_max_tokens: int = 512
-    
-    # LLAMA API (university VPN)
-    llama_api_key: Optional[str] = None
-    llama_api_url: Optional[str] = None
-    llama_model: str = "llama-3.1-8b"
+    # ── Gemini LLM ───────────────────────────────────────────────────────────
+    gemini_api_key: str  # Required — set GEMINI_API_KEY in .env or Railway Variables
+    gemini_model: str = "gemini-2.0-flash"
+    gemini_temperature: float = 0.3
+    gemini_max_tokens: int = 512
 
-    # Experiments
-    default_experiment_id: str = "default-experiment"
+    # ── Experiments ──────────────────────────────────────────────────────────
+    default_experiment_id: Optional[str] = None
 
-    # Qualtrics / Prolific redirects (templates)
+    # ── Memory window (turns to include in LLM context) ──────────────────────
+    memory_window: int = 20
+
+    # ── Qualtrics / Prolific redirects ───────────────────────────────────────
     qualtrics_post_base_url: Optional[str] = None
 
-    # CORS / frontend - simple string for comma-separated origins
-    cors_origins: Optional[str] = "http://localhost:3000,http://127.0.0.1:3000"
+    # ── CORS / frontend ──────────────────────────────────────────────────────
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
 
 @lru_cache()
