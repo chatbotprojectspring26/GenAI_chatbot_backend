@@ -73,6 +73,10 @@ async def init_db() -> None:
     await db.events.create_index("chat_session_id", name="idx_events_session")
     await db.events.create_index("created_at", name="idx_events_time")
 
+    # ── tab_events ───────────────────────────────────────────────────────────
+    await db.tab_events.create_index("chat_session_id", name="idx_tab_events_session")
+    await db.tab_events.create_index("timestamp", name="idx_tab_events_time")
+
 
 async def close_db() -> None:
     """Close the Motor client. Called from FastAPI lifespan shutdown handler."""

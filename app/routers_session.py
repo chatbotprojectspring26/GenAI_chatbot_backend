@@ -136,3 +136,23 @@ async def view_active_sessions(
         "count": len(sessions),
         "sessions": sessions,
     }
+
+
+@router.post("/tab-event")
+async def log_tab_event(
+    payload: schemas.TabEventRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """
+    Logs browser visibility and window focus events.
+    Frontend sends this when the user switches tabs or focuses away.
+    """
+    from datetime import datetime, timezone
+
+    event_data = payload.model_dump()
+    event_data["received_at"] = datetime.now(timezone.utc)
+    
+    await db.tab_events.insert_one(event_data)
+    
+    return {"status": "ok"}
+
