@@ -13,8 +13,8 @@ async def start_session(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     """
-    Creates or retrieves a participant, assigns A/B condition (stable per PID),
-    opens a new ChatSession, and returns the chat_session_id.
+    Creates or retrieves a participant, opens a new ChatSession for the specified A/B condition,
+    and returns the chat_session_id.
     """
     print("Received-Session-Info:", payload)
 
@@ -32,6 +32,7 @@ async def start_session(
             db=db,
             participant=participant,
             experiment_id=payload.experiment_id,
+            condition_name=payload.condition_name,
             qr_pre=payload.qr_pre,
             prolific_session_id=payload.prolific_session_id or payload.session_id,
             client_metadata=payload.client_metadata,

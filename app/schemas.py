@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 class SessionStartRequest(BaseModel):
     pid: str
+    condition_name: str                         # The A/B condition assigned by Qualtrics
     study_id: Optional[str] = None
     prolific_session_id: Optional[str] = None   # Prolific session token
     session_id: Optional[str] = None            # legacy alias

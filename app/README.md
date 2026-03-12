@@ -92,9 +92,9 @@ FastAPI backend for the GenAI Research Chatbot Platform, built for A/B testing e
 | Function | DB Operation | Description |
 |---|---|---|
 | `get_or_create_participant()` | `participants.find_one_and_update` (upsert) | Idempotent participant lookup by `(pid, study_id)` |
-| `_pick_random_condition()` | `conditions.aggregate` `$sample` | Random A/B assignment from active conditions |
 | `get_condition()` | `conditions.find_one` | Fetch condition by ObjectId |
-| `create_chat_session()` | `chat_sessions.insert_one`, `participants.update_one` | Creates session; assigns condition (stable per PID) |
+| `get_condition_by_name()` | `conditions.find_one` | Fetch condition by text name |
+| `create_chat_session()` | `chat_sessions.insert_one`, `participants.update_one` | Creates session using condition picked by frontend |
 | `get_chat_session()` | `chat_sessions.find_one` | Validates session exists and is active |
 | `end_chat_session()` | `chat_sessions.find_one_and_update` | Sets `status=completed`, records `ended_at` |
 | `handle_chat_turn()` | `messages.find`, `messages.insert_many`, `chat_sessions.update_one` | Full turn: load history → call OpenAI → persist messages |
@@ -127,7 +127,7 @@ FastAPI backend for the GenAI Research Chatbot Platform, built for A/B testing e
 
 | Endpoint | Method | Description | DB Collections |
 |---|---|---|---|
-| `/session/start` | POST | Create participant + assign condition + open session | `participants`, `conditions`, `chat_sessions`, `events` |
+| `/session/start` | POST | Create participant + opens session using frontend assigned condition | `participants`, `conditions`, `chat_sessions`, `events` |
 | `/session/end` | POST | Mark session completed, return Qualtrics redirect URL | `chat_sessions`, `participants`, `events` |
 | `/session/view/{id}` | GET | Return raw session doc + all messages | `chat_sessions`, `messages` |
 | `/session/active` | GET | List all sessions with `status=active` | `chat_sessions` |
