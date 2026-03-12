@@ -13,8 +13,8 @@ async def start_session(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     """
-    Creates or retrieves a participant, opens a new ChatSession for the specified A/B condition,
-    and returns the chat_session_id.
+    Creates or retrieves a participant, assigns A/B condition (stable per PID),
+    opens a new ChatSession, and returns the chat_session_id.
     """
     print("Received-Session-Info:", payload)
 
@@ -32,7 +32,6 @@ async def start_session(
             db=db,
             participant=participant,
             experiment_id=payload.experiment_id,
-            condition_name=payload.condition_name,
             qr_pre=payload.qr_pre,
             prolific_session_id=payload.prolific_session_id or payload.session_id,
             client_metadata=payload.client_metadata,
@@ -66,9 +65,7 @@ async def end_session(
     """
     try:
         session = await services.end_chat_session(
-            db=db, 
-            chat_session_id=payload.chat_session_id,
-            completion_status=payload.completion_status or "completed"
+            db=db, chat_session_id=payload.chat_session_id
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -88,7 +85,7 @@ async def end_session(
     await services.log_event(
         db=db,
         event_type="session_end",
-        description=f"Session ended for pid={pid} with status={session['status']}",
+        description=f"Session ended for pid={pid}",
         chat_session_id=session["id"],
         participant_id=session["participant_id"],
     )
