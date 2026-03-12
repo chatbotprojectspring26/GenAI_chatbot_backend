@@ -41,6 +41,8 @@ class ChatResponse(BaseModel):
 
 class SessionEndRequest(BaseModel):
     chat_session_id: str
+    completion_status: Optional[str] = None
+    pid: Optional[str] = None
 
 
 class SessionEndResponse(BaseModel):

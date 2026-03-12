@@ -145,12 +145,12 @@ async def get_chat_session(db: AsyncIOMotorDatabase, chat_session_id: str) -> di
 
 
 async def end_chat_session(
-    db: AsyncIOMotorDatabase, chat_session_id: str
+    db: AsyncIOMotorDatabase, chat_session_id: str, completion_status: str = "completed"
 ) -> dict:
     now = datetime.utcnow()
     doc = await db.chat_sessions.find_one_and_update(
         {"_id": chat_session_id},
-        {"$set": {"status": "completed", "ended_at": now}},
+        {"$set": {"status": completion_status, "ended_at": now}},
         return_document=True,
     )
     if not doc:

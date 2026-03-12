@@ -66,7 +66,9 @@ async def end_session(
     """
     try:
         session = await services.end_chat_session(
-            db=db, chat_session_id=payload.chat_session_id
+            db=db, 
+            chat_session_id=payload.chat_session_id,
+            completion_status=payload.completion_status or "completed"
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -86,7 +88,7 @@ async def end_session(
     await services.log_event(
         db=db,
         event_type="session_end",
-        description=f"Session ended for pid={pid}",
+        description=f"Session ended for pid={pid} with status={session['status']}",
         chat_session_id=session["id"],
         participant_id=session["participant_id"],
     )
