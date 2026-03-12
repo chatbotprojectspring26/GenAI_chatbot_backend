@@ -3,64 +3,90 @@ import io
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlmodel import Session, select
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from .db import get_session
-from . import models
-
+from .db import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+VALID_TABLES = {"participants", "sessions", "messages"}
+
 
 @router.get("/sessions")
-def list_sessions(
-    experiment_id: Optional[int] = None,
-    condition_id: Optional[int] = None,
-    db: Session = Depends(get_session),
+async def list_sessions(
+    experiment_id: Optional[str] = None,
+    condition_id: Optional[str] = None,
+    db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    query = select(models.ChatSession)
-    if experiment_id is not None:
-        query = query.where(models.ChatSession.experiment_id == experiment_id)
-    if condition_id is not None:
-        query = query.where(models.ChatSession.condition_id == condition_id)
-    sessions = db.exec(query).all()
-    return sessions
+    """List chat sessions, optionally filtered by experiment or condition."""
+    query: dict = {}
+    if experiment_id:
+        query["experiment_id"] = experiment_id
+    if condition_id:
+        query["condition_id"] = condition_id
+
+    docs = await db.chat_sessions.find(query).to_list(length=500)
+    for d in docs:
+        d["id"] = str(d.pop("_id"))
+    return docs
 
 
 @router.get("/export")
-def export_data(
-    experiment_id: Optional[int] = None,
+async def export_data(
+    experiment_id: Optional[str] = None,
     table: str = "messages",
     format: str = "csv",
-    db: Session = Depends(get_session),
+    db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    if table not in {"participants", "sessions", "messages"}:
-        raise HTTPException(status_code=400, detail="Invalid table")
+    """
+    Export a collection as JSON or CSV.
+    Tables: participants | sessions | messages
+    """
+    if table not in VALID_TABLES:
+        raise HTTPException(status_code=400, detail=f"Invalid table. Choose from: {VALID_TABLES}")
 
     if table == "participants":
-        rows = db.exec(select(models.Participant)).all()
+        query = {}
+        docs = await db.participants.find(query).to_list(length=5000)
     elif table == "sessions":
-        rows = db.exec(select(models.ChatSession)).all()
-    else:
-        rows = db.exec(select(models.Message)).all()
+        query = {}
+        if experiment_id:
+            query["experiment_id"] = experiment_id
+        docs = await db.chat_sessions.find(query).to_list(length=5000)
+    else:  # messages
+        query = {}
+        if experiment_id:
+            # Join via sessions to filter by experiment (denormalised: filter by condition's experiment)
+            session_ids_cursor = db.chat_sessions.find(
+                {"experiment_id": experiment_id} if experiment_id else {},
+                {"_id": 1},
+            )
+            session_ids = [str(s["_id"]) async for s in session_ids_cursor]
+            if session_ids:
+                query["chat_session_id"] = {"$in": session_ids}
+        docs = await db.messages.find(query).sort("turn_index", 1).to_list(length=50000)
+
+    # Convert ObjectId _id fields to strings
+    for d in docs:
+        if "_id" in d:
+            d["id"] = str(d.pop("_id"))
 
     if format == "json":
-        return rows
+        return docs
 
     # CSV export
-    output = io.StringIO()
-    if not rows:
+    if not docs:
         return Response(content="", media_type="text/csv")
 
-    fieldnames = rows[0].dict().keys()
-    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    output = io.StringIO()
+    fieldnames = list(docs[0].keys())
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
-    for row in rows:
-        writer.writerow(row.dict())
+    for row in docs:
+        writer.writerow(row)
 
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{table}.csv"'},
     )
-

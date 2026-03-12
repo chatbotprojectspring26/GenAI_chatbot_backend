@@ -1,71 +1,112 @@
+"""
+Pydantic document models representing MongoDB collections.
+
+Convention:
+  - `id` field maps to MongoDB _id.
+  - Session _id is stored as a UUID string (URL-safe).
+  - Condition / Participant _id are MongoDB ObjectId hex strings.
+  - Timestamps are always UTC datetime objects.
+"""
 from datetime import datetime
-from typing import Optional
-from uuid import UUID, uuid4
+from typing import Any, Dict, Literal, Optional
+from uuid import uuid4
 
-from sqlmodel import SQLModel, Field, Column, JSON
+from pydantic import BaseModel, Field
 
 
-class Participant(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    pid: str = Field(index=True)
-    study_id: Optional[str] = Field(default=None, index=True)
-    assigned_condition_id: Optional[int] = Field(default=None, foreign_key="condition.id")
+# ─────────────────────────────────────────────────────────────────────────────
+# experiments collection
+# ─────────────────────────────────────────────────────────────────────────────
+class Experiment(BaseModel):
+    id: Optional[str] = None                  # MongoDB ObjectId hex string
+    name: str
+    description: Optional[str] = None
+    status: Literal["draft", "active", "completed"] = "draft"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class Experiment(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
+# ─────────────────────────────────────────────────────────────────────────────
+# conditions collection  (one document per A/B arm)
+# ─────────────────────────────────────────────────────────────────────────────
+class Condition(BaseModel):
+    id: Optional[str] = None
+    experiment_id: str                        # ref → experiments._id
+    name: str                                 # e.g. "control" | "treatment"
     description: Optional[str] = None
-    status: str = Field(default="draft", index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-class Condition(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    experiment_id: int = Field(foreign_key="experiment.id", index=True)
-    name: str
-    description: Optional[str] = None
+    system_prompt: str
     llm_model: str
     temperature: float = 0.3
     max_tokens: int = 512
-    system_prompt: str
-    is_active: bool = Field(default=True, index=True)
+    is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class ChatSession(SQLModel, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
-    participant_id: int = Field(foreign_key="participant.id", index=True)
-    experiment_id: int = Field(foreign_key="experiment.id", index=True)
-    condition_id: int = Field(foreign_key="condition.id", index=True)
-    qr_pre: Optional[str] = None
-    qr_post: Optional[str] = None
+# ─────────────────────────────────────────────────────────────────────────────
+# participants collection  (one document per PID × study_id pair)
+# ─────────────────────────────────────────────────────────────────────────────
+class Participant(BaseModel):
+    id: Optional[str] = None
+    pid: str                                  # Prolific participant ID
+    study_id: Optional[str] = None            # Prolific study ID
+    assigned_condition_id: Optional[str] = None   # set once on first session
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# chat_sessions collection
+# ─────────────────────────────────────────────────────────────────────────────
+class ChatSession(BaseModel):
+    # UUID string stored as MongoDB _id — URL-safe and unguessable.
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    participant_id: str                       # ref → participants._id
+    experiment_id: str                        # ref → experiments._id
+    condition_id: str                         # ref → conditions._id
+    qr_pre: Optional[str] = None             # Qualtrics PreSurvey ResponseID
+    qr_post: Optional[str] = None            # Qualtrics PostSurvey ResponseID
+    prolific_session_id: Optional[str] = None
+    status: Literal["active", "completed", "abandoned"] = "active"
     started_at: datetime = Field(default_factory=datetime.utcnow)
     ended_at: Optional[datetime] = None
-    status: str = Field(default="active", index=True)
-    prolific_session_id: Optional[str] = None
-    client_metadata: Optional[dict] = Field(
-        sa_column=Column(JSON), default=None
-    )
+    turn_count: int = 0                       # incremented per user turn
+    client_metadata: Optional[Dict[str, Any]] = None
 
 
-class Message(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    chat_session_id: UUID = Field(foreign_key="chatsession.id", index=True)
-    turn_index: int = Field(index=True)
-    role: str = Field(index=True)  # "system" | "user" | "assistant"
+# ─────────────────────────────────────────────────────────────────────────────
+# messages collection
+# ─────────────────────────────────────────────────────────────────────────────
+class Message(BaseModel):
+    id: Optional[str] = None
+    chat_session_id: str                      # ref → chat_sessions._id (UUID)
+    turn_index: int                           # 0-based; even=user, odd=assistant
+    role: Literal["user", "assistant", "system"]
     text: str
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
-    condition_id: int = Field(foreign_key="condition.id", index=True)
-    prompt_hash: Optional[str] = Field(default=None, index=True)
-    model: Optional[str] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    # ── experimental provenance (denormalised for flat CSV export) ────────────
+    condition_id: str
+    prompt_hash: str                          # SHA-256 of system_prompt
+    model: str
+    temperature: float
+    max_tokens: int
+    # ── token accounting ──────────────────────────────────────────────────────
     num_input_tokens: Optional[int] = None
     num_output_tokens: Optional[int] = None
-    message_metadata: Optional[dict] = Field(sa_column=Column(JSON), default=None)
+    total_tokens: Optional[int] = None
+    # ── arbitrary extra data ──────────────────────────────────────────────────
+    message_metadata: Optional[Dict[str, Any]] = None
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# events collection  (system / error audit log)
+# ─────────────────────────────────────────────────────────────────────────────
+class Event(BaseModel):
+    id: Optional[str] = None
+    chat_session_id: Optional[str] = None     # may be None for pre-session errors
+    participant_id: Optional[str] = None
+    event_type: str                           # e.g. "session_start" | "error"
+    severity: Literal["info", "warning", "error", "fatal"] = "info"
+    description: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    metadata: Optional[Dict[str, Any]] = None
