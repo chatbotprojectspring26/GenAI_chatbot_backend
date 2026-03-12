@@ -47,6 +47,17 @@ class SessionEndResponse(BaseModel):
     redirect_url: str
 
 
+class TabEventRequest(BaseModel):
+    chat_session_id: str
+    pid: str
+    event_type: str             # tab_hidden, tab_visible, window_blur, window_focus
+    trigger: str
+    timestamp: datetime         # ISO string from frontend
+    duration_away_ms: Optional[int] = None
+    turn_id_at_event: int
+    tab_still_visible: Optional[bool] = None
+
+
 class FinalChatRequest(BaseModel):
     """Final turn: processes message, ends session, returns redirect URL."""
     chat_session_id: str
