@@ -70,22 +70,14 @@ async def get_or_create_participant(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Condition assignment  (stable A/B)
+# Condition assignment
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _pick_random_condition(
-    db: AsyncIOMotorDatabase,
-    experiment_id: str,
-) -> dict:
-    """Pick one active condition at random using MongoDB $sample."""
-    pipeline = [
-        {"$match": {"experiment_id": experiment_id, "is_active": True}},
-        {"$sample": {"size": 1}},
-    ]
-    docs = await db.conditions.aggregate(pipeline).to_list(length=1)
-    if not docs:
-        raise ValueError(f"No active conditions for experiment {experiment_id}")
-    return _to_str_id(docs[0])
+async def get_condition_by_name(db: AsyncIOMotorDatabase, experiment_id: str, condition_name: str) -> dict:
+    doc = await db.conditions.find_one({"experiment_id": experiment_id, "name": condition_name, "is_active": True})
+    if not doc:
+        raise ValueError(f"Active condition '{condition_name}' not found for experiment {experiment_id}")
+    return _to_str_id(doc)
 
 
 async def get_condition(db: AsyncIOMotorDatabase, condition_id: str) -> dict:
@@ -103,24 +95,21 @@ async def create_chat_session(
     db: AsyncIOMotorDatabase,
     participant: dict,
     experiment_id: str,
+    condition_name: str,
     qr_pre: Optional[str],
     prolific_session_id: Optional[str],
     client_metadata: Optional[dict],
 ) -> Tuple[dict, dict]:
     """
     Create a new ChatSession.
-
-    STABLE A/B LOGIC:
-      If the participant already has an assigned_condition_id we reuse it.
-      Only on the very first session do we pick randomly.
-    This guarantees the same PID always sees the same condition.
+    Selects the exact condition specified by the Qualtrics frontend.
     """
     participant_id = participant["id"]
 
-    if participant.get("assigned_condition_id"):
-        condition = await get_condition(db, participant["assigned_condition_id"])
-    else:
-        condition = await _pick_random_condition(db, experiment_id)
+    condition = await get_condition_by_name(db, experiment_id, condition_name)
+
+    # Optional: Update the participant record to track what frontend assigned them
+    if not participant.get("assigned_condition_id"):
         await db.participants.update_one(
             {"_id": ObjectId(participant_id)},
             {
@@ -156,12 +145,12 @@ async def get_chat_session(db: AsyncIOMotorDatabase, chat_session_id: str) -> di
 
 
 async def end_chat_session(
-    db: AsyncIOMotorDatabase, chat_session_id: str
+    db: AsyncIOMotorDatabase, chat_session_id: str, completion_status: str = "completed"
 ) -> dict:
     now = datetime.utcnow()
     doc = await db.chat_sessions.find_one_and_update(
         {"_id": chat_session_id},
-        {"$set": {"status": "completed", "ended_at": now}},
+        {"$set": {"status": completion_status, "ended_at": now}},
         return_document=True,
     )
     if not doc:
