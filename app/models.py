@@ -62,7 +62,7 @@ class ChatSession(BaseModel):
     # UUID string stored as MongoDB _id — URL-safe and unguessable.
     id: str = Field(default_factory=lambda: str(uuid4()))
     participant_id: str                       # ref → participants._id
-    experiment_id: str                        # ref → experiments._id
+    experiment_id: Optional[str] = None      # ref → experiments._id (optional)
     condition_id: str                         # ref → conditions._id
     qr_pre: Optional[str] = None             # Qualtrics PreSurvey ResponseID
     qr_post: Optional[str] = None            # Qualtrics PostSurvey ResponseID
