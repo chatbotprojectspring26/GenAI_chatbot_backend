@@ -18,9 +18,6 @@ async def start_session(
     """
     print("Received-Session-Info:", payload)
 
-    if not payload.experiment_id:
-        raise HTTPException(status_code=400, detail="experiment_id is required")
-
     participant = await services.get_or_create_participant(
         db=db,
         pid=payload.pid,

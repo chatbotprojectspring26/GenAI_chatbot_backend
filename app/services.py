@@ -73,10 +73,14 @@ async def get_or_create_participant(
 # Condition assignment
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def get_condition_by_name(db: AsyncIOMotorDatabase, experiment_id: str, condition_name: str) -> dict:
-    doc = await db.conditions.find_one({"experiment_id": experiment_id, "name": condition_name, "is_active": True})
+async def get_condition_by_name(db: AsyncIOMotorDatabase, condition_name: str, experiment_id: Optional[str] = None) -> dict:
+    query: dict = {"name": condition_name, "is_active": True}
+    if experiment_id:
+        query["experiment_id"] = experiment_id
+    doc = await db.conditions.find_one(query)
     if not doc:
-        raise ValueError(f"Active condition '{condition_name}' not found for experiment {experiment_id}")
+        exp_info = f" for experiment {experiment_id}" if experiment_id else ""
+        raise ValueError(f"Active condition '{condition_name}' not found{exp_info}")
     return _to_str_id(doc)
 
 
@@ -94,19 +98,20 @@ async def get_condition(db: AsyncIOMotorDatabase, condition_id: str) -> dict:
 async def create_chat_session(
     db: AsyncIOMotorDatabase,
     participant: dict,
-    experiment_id: str,
     condition_name: str,
-    qr_pre: Optional[str],
-    prolific_session_id: Optional[str],
-    client_metadata: Optional[dict],
+    experiment_id: Optional[str] = None,
+    qr_pre: Optional[str] = None,
+    prolific_session_id: Optional[str] = None,
+    client_metadata: Optional[dict] = None,
 ) -> Tuple[dict, dict]:
     """
     Create a new ChatSession.
     Selects the exact condition specified by the Qualtrics frontend.
+    experiment_id is optional — if omitted, the first matching active condition by name is used.
     """
     participant_id = participant["id"]
 
-    condition = await get_condition_by_name(db, experiment_id, condition_name)
+    condition = await get_condition_by_name(db, condition_name, experiment_id)
 
     # Optional: Update the participant record to track what frontend assigned them
     if not participant.get("assigned_condition_id"):
